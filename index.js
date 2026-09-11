@@ -25,7 +25,55 @@ const client = new Client({
 const estadoCanales = new Map();
 // Conjunto para almacenar los IDs de usuarios que están hablando en tiempo real
 const usuariosHablando = new Set();
+// Línea 27: const usuariosHablando = new Set();
 
+// A PARTIR DE LA LÍNEA 28 PEGAS ESTO:
+const jugadoresMuertos = new Set();
+
+async function iniciarTareas(canalVoz) {
+  for (const miembro of canalVoz.members.values()) {
+    if (miembro.user.bot) continue;
+
+    if (jugadoresMuertos.has(miembro.id)) {
+      await miembro.voice.setMute(false);
+      await miembro.voice.setDeaf(false);
+    } else {
+      await miembro.voice.setMute(true);
+      await miembro.voice.setDeaf(true);
+    }
+  }
+}
+
+async function iniciarReunion(canalVoz) {
+  for (const miembro of canalVoz.members.values()) {
+    if (miembro.user.bot) continue;
+
+    if (jugadoresMuertos.has(miembro.id)) {
+      await miembro.voice.setMute(true);
+      await miembro.voice.setDeaf(false);
+    } else {
+      await miembro.voice.setMute(false);
+      await miembro.voice.setDeaf(false);
+    }
+  }
+}
+
+async function matarJugador(miembro) {
+  jugadoresMuertos.add(miembro.id);
+  await miembro.voice.setMute(false);
+  await miembro.voice.setDeaf(false);
+}
+
+async function terminarPartida(canalVoz) {
+  jugadoresMuertos.clear();
+  for (const miembro of canalVoz.members.values()) {
+    if (miembro.user.bot) continue;
+    await miembro.voice.setMute(false);
+    await miembro.voice.setDeaf(false);
+  }
+}
+
+// Línea 29 (en tu imagen original): const commands = [ ...
 const commands = [
   new SlashCommandBuilder()
     .setName("start")

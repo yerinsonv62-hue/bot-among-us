@@ -2,7 +2,8 @@ const {
     Client, 
     GatewayIntentBits, 
     SlashCommandBuilder, 
-    Partials 
+    Partials,
+    ChannelType
 } = require("discord.js");
 require("dotenv").config();
 
@@ -22,10 +23,8 @@ const client = new Client({
     partials: [Partials.Channel, Partials.Message]
 });
 
-// Registro de jugadores muertos y estados
 const jugadoresMuertos = new Set();
 
-// Funciones lógicas de Among Us
 async function iniciarTareas(canalVoz) {
     for (const miembro of canalVoz.members.values()) {
         if (miembro.user.bot) continue;
@@ -88,9 +87,17 @@ async function terminarPartida(canalVoz) {
     }
 }
 
-// Definición de Slash Commands para que aparezcan en Discord
+// Definición de Slash Commands con las opciones de code, timer y channel en /start
 const commands = [
-    new SlashCommandBuilder().setName("start").setDescription("Inicia la partida y mutea a todos"),
+    new SlashCommandBuilder()
+        .setName("start")
+        .setDescription("Inicia la partida y mutea a todos")
+        .addStringOption(option => 
+            option.setName("code").setDescription("Código de la partida de Among Us").setRequired(false))
+        .addIntegerOption(option => 
+            option.setName("timer").setDescription("Tiempo de discusión o configuración").setRequired(false))
+        .addChannelOption(option => 
+            option.setName("channel").setDescription("Canal de voz a utilizar").addChannelTypes(ChannelType.GuildVoice).setRequired(false)),
     new SlashCommandBuilder().setName("meeting").setDescription("Desmutea a todos para una reunión"),
     new SlashCommandBuilder().setName("stop").setDescription("Termina la partida y desmutea a todos"),
     new SlashCommandBuilder().setName("mute").setDescription("Mutea a todos"),
@@ -109,42 +116,67 @@ client.once("ready", async () => {
     console.log(`Bot conectado exitosamente como ${client.user.tag}`);
     try {
         await client.application.commands.set(commands);
-        console.log("Slash commands registrados correctamente.");
+        console.log("Slash commands registrados correctamente con opciones.");
     } catch (error) {
         console.error("Error al registrar slash commands:", error);
     }
 });
 
-// Función auxiliar para encontrar el canal de voz de un usuario (ya sea por DM o servidor)
-async function obtenerCanalVozUsuario(user) {
+async function obtenerCanalVozUsuario(user, guildId = null) {
+    if (guildId) {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) {
+            try {
+                const miembro = await guild.members.fetch(user.id);
+                if (miembro && miembro.voice.channel) return miembro.voice.channel;
+            } catch (err) {}
+        }
+    }
     for (const guild of client.guilds.cache.values()) {
         try {
             const miembro = await guild.members.fetch(user.id);
-            if (miembro && miembro.voice.channel) {
-                return miembro.voice.channel;
-            }
+            if (miembro && miembro.voice.channel) return miembro.voice.channel;
         } catch (err) {}
     }
     return null;
 }
 
-// 1. Control mediante Slash Commands (/)
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
-    const { commandName, user } = interaction;
-    const canalVoz = await obtenerCanalVozUsuario(user);
+    const { commandName, user, options, guildId } = interaction;
 
+    if (commandName === "start") {
+        // Obtener el canal especificado en la opción o buscar el del usuario automáticamente
+        const canalOpcion = options.getChannel("channel");
+        const codigoPartida = options.getString("code");
+        const tiempoTimer = options.getInteger("timer");
+
+        let canalVoz = canalOpcion || (await obtenerCanalVozUsuario(user, guildId));
+
+        if (!canalVoz) {
+            return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz o seleccionar uno en la opción.", ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+        await iniciarTareas(canalVoz);
+
+        let respuesta = `🎮 Tareas iniciadas en **${canalVoz.name}**`;
+        if (codigoPartida) respuesta += ` | Código: \`${codigoPartida}\``;
+        if (tiempoTimer) respuesta += ` | Timer: \`${tiempoTimer}s\``;
+
+        await interaction.editReply(respuesta);
+        return;
+    }
+
+    const canalVoz = await obtenerCanalVozUsuario(user, guildId);
     if (!canalVoz) {
-        return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz en un servidor.", ephemeral: true });
+        return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz.", ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
 
-    if (commandName === "start") {
-        await iniciarTareas(canalVoz);
-        await interaction.editReply(`🎮 Tareas iniciadas en **${canalVoz.name}**.`);
-    } else if (commandName === "meeting") {
+    if (commandName === "meeting") {
         await iniciarReunion(canalVoz);
         await interaction.editReply(`📢 Reunión convocada en **${canalVoz.name}**.`);
     } else if (commandName === "stop") {
@@ -157,19 +189,19 @@ client.on("interactionCreate", async (interaction) => {
         await desmutearTodos(canalVoz);
         await interaction.editReply(`🔊 Todos desmuteados.`);
     } else if (commandName === "dead") {
-        const miembroMeta = interaction.options.getMember("usuario");
+        const miembroMeta = options.getMember("usuario");
         if (!miembroMeta) return interaction.editReply("No se encontró al usuario.");
         await matarJugador(miembroMeta);
         await interaction.editReply(`💀 ${miembroMeta.user.username} marcado como muerto.`);
     } else if (commandName === "alive") {
-        const miembroMeta = interaction.options.getMember("usuario");
+        const miembroMeta = options.getMember("usuario");
         if (!miembroMeta) return interaction.editReply("No se encontró al usuario.");
         await revivirJugador(miembroMeta);
         await interaction.editReply(`✨ ${miembroMeta.user.username} revivido.`);
     }
 });
 
-// 2. Control mediante Mensajes de Texto o DM (escribiendo por privado)
+// Control por mensajes de texto directos o DM por si acaso
 client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 

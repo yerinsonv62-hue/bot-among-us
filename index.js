@@ -5,6 +5,12 @@ const {
   SlashCommandBuilder
 } = require("discord.js");
 require("dotenv").config();
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('El bot está vivo y engañando a Render.'));
+app.listen(process.env.PORT || 3000, () => {
+  console.log('Servidor web encendido para mantener el bot gratis.');
+});
 
 const client = new Client({
   intents: [

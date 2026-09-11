@@ -217,9 +217,4 @@ client.on("interactionCreate", async interaction => {
     return interaction.editReply(`PARTIDA TERMINADA\n${cantidad} jugadores desmuteados.`);
   }
 });
-
-// Reemplaza esto:
-// client.login(process.env.DISCORD_TOKEN);
-
-// Por esto (colocando tu token dentro de las comillas):
-client.login("MTU0Nzc4NjQzOTEyMTU2NzgzNA.G4FI-q.BvtY6PPtTUkqEPYL4fgONVKEEqrA3YHx6-NJCQ");
+client.login(process.env.DISCORD_TOKEN);

@@ -2,23 +2,29 @@ const {
   Client,
   GatewayIntentBits,
   PermissionFlagsBits,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  Partials,
+  ChannelType
 } = require("discord.js");
+const { joinVoiceChannel, VoiceConnectionStatus } = require("@discordjs/voice");
 require("dotenv").config();
-const express = require('express');
-const app = express();
-app.get('/', (req, res) => res.send('El bot está vivo y engañando a Render.'));
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Servidor web encendido para mantener el bot gratis.');
-});
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMembers
-  ]
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent
+  ],
+  partials: [Partials.Channel] // Necesario para recibir DMs de usuarios
 });
+
+// Mapa para rastrear el estado de mute por canal (true = muteados, false = desmuteados)
+const estadoCanales = new Map();
+// Conjunto para almacenar los IDs de usuarios que están hablando en tiempo real
+const usuariosHablando = new Set();
 
 const commands = [
   new SlashCommandBuilder()
@@ -65,7 +71,113 @@ client.once("ready", async () => {
     console.error("Error registrando comandos:", error);
   }
 });
+client.on("messageCreate", async (message) => {
+  // Ignorar mensajes de bots
+  if (message.author.bot) return;
 
+  // Comprobar si el mensaje viene por DM (Mensaje Privado)
+  if (message.channel.type === ChannelType.DM || !message.guild) {
+    const contenido = message.content.trim().toLowerCase();
+
+    // 1. Buscar en qué servidor y canal de voz está el usuario que envió el DM
+    let usuarioMiembro = null;
+    let canalVoz = null;
+
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        const miembro = await guild.members.fetch(message.author.id);
+        if (miembro && miembro.voice.channel) {
+          usuarioMiembro = miembro;
+          canalVoz = miembro.voice.channel;
+          break; // Detener la búsqueda al encontrar el canal de voz activo del usuario
+        }
+      } catch (err) {
+        // El usuario no pertenece a este servidor o no está en voz
+      }
+    }
+
+    if (!canalVoz) {
+      return message.reply("No te encontré en ningún canal de voz activo en los servidores donde estoy.");
+    }
+
+    // ==========================================
+    // COMANDO 1: "sus" (Mute / Unmute por DM)
+    // ==========================================
+    if (contenido === "sus") {
+      // Obtener o alternar el estado actual del canal
+      const estadoActual = estadoCanales.get(canalVoz.id) || false;
+      const nuevoEstado = !estadoActual;
+
+      let procesados = 0;
+      for (const miembro of canalVoz.members.values()) {
+        if (miembro.user.bot) continue;
+        try {
+          await miembro.voice.setMute(nuevoEstado, "Comando sus por DM");
+          procesados++;
+        } catch (error) {
+          console.error(`Error al modificar estado de ${miembro.user.tag}:`, error);
+        }
+      }
+
+      estadoCanales.set(canalVoz.id, nuevoEstado);
+      return message.reply(
+        `Acción realizada en el canal **${canalVoz.name}**.\nJugadores ${
+          nuevoEstado ? "muteados" : "desmuteados"
+        }: ${procesados}`
+      );
+    }
+
+    // ==========================================
+    // COMANDO 2: ".i" (Unirse al canal y mutear no hablantes)
+    // ==========================================
+    if (contenido === ".i") {
+      try {
+        // Conectar el bot al canal de voz del usuario
+        const conexion = joinVoiceChannel({
+          channelId: canalVoz.id,
+          guildId: canalVoz.guild.id,
+          adapterCreator: canalVoz.guild.voiceAdapterCreator,
+          selfMute: false,
+          selfDeaf: false
+        });
+
+        message.reply(`Me he conectado al canal de voz **${canalVoz.name}**. Escuchando actividad de voz...`);
+
+        // Escuchar eventos de habla
+        conexion.receiver.speaking.on("start", (userId) => {
+          usuariosHablando.add(userId);
+        });
+
+        conexion.receiver.speaking.on("end", (userId) => {
+          usuariosHablando.delete(userId);
+        });
+
+        // Esperar 3 segundos de evaluación para determinar quién no está hablando y mutearlo
+        setTimeout(async () => {
+          let muteados = 0;
+          for (const miembro of canalVoz.members.values()) {
+            if (miembro.user.bot) continue;
+
+            // Si el miembro NO está en la lista de usuarios que hablaron
+            if (!usuariosHablando.has(miembro.id)) {
+              try {
+                await miembro.voice.setMute(true, "Inactivo / Silencioso detectado por .i");
+                muteados++;
+              } catch (e) {
+                console.error(`No se pudo mutear a ${miembro.user.tag}`);
+              }
+            }
+          }
+          message.reply(`Evaluación completada en **${canalVoz.name}**. Muteados por silencio: ${muteados}`);
+        }, 3000);
+
+      } catch (error) {
+        console.error("Error al conectar al canal de voz:", error);
+        return message.reply("No pude unirme al canal de voz.");
+      }
+    }
+  }
+});
 function obtenerCanal(interaction) {
   return interaction.member.voice.channel;
 }

@@ -90,7 +90,6 @@ async function terminarPartida(canalVoz) {
     }
 }
 
-// Definición de Slash Commands incluyendo el comando /panel
 const commands = [
     new SlashCommandBuilder()
         .setName("start")
@@ -142,9 +141,7 @@ async function obtenerCanalVozUsuario(user, guildId = null) {
     return null;
 }
 
-// Manejo de Interacciones (Slash Commands y Botones)
 client.on("interactionCreate", async (interaction) => {
-    // 1. Si es un botón interactivo del panel
     if (interaction.isButton()) {
         const canalVoz = await obtenerCanalVozUsuario(interaction.user, interaction.guildId);
         if (!canalVoz) {
@@ -161,7 +158,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         if (interaction.customId === "btn_stop") {
             await terminarPartida(canalVoz);
-            return interaction.reply({ content: `🏁 Partida finalizada en **${canalVoz.name}**.`);
+            return interaction.reply({ content: `🏁 Partida finalizada en **${canalVoz.name}**.` });
         }
     }
 
@@ -207,23 +204,23 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.editReply(`📢 Reunión convocada en **${canalVoz.name}**.`);
     } else if (commandName === "stop") {
         await terminarPartida(canalVoz);
-        await interaction.editReply(`🏁 Partida finalizada en **${canalVoz.name}**.`);
+        return interaction.editReply(`🏁 Partida finalizada en **${canalVoz.name}**.`);
     } else if (commandName === "mute") {
         await silenciarTodos(canalVoz);
-        await interaction.editReply(`🔇 Todos silenciados.`);
+        return interaction.editReply(`🔇 Todos silenciados.`);
     } else if (commandName === "unmute") {
         await desmutearTodos(canalVoz);
-        await interaction.editReply(`🔊 Todos desmuteados.`);
+        return interaction.editReply(`🔊 Todos desmuteados.`);
     } else if (commandName === "dead") {
         const miembroMeta = options.getMember("usuario");
         if (!miembroMeta) return interaction.editReply("No se encontró al usuario.");
         await matarJugador(miembroMeta);
-        await interaction.editReply(`💀 ${miembroMeta.user.username} marcado como muerto.`);
+        return interaction.editReply(`💀 ${miembroMeta.user.username} marcado como muerto.`);
     } else if (commandName === "alive") {
         const miembroMeta = options.getMember("usuario");
         if (!miembroMeta) return interaction.editReply("No se encontró al usuario.");
         await revivirJugador(miembroMeta);
-        await interaction.editReply(`✨ ${miembroMeta.user.username} revivido.`);
+        return interaction.editReply(`✨ ${miembroMeta.user.username} revivido.`);
     }
 });
 

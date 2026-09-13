@@ -11,6 +11,7 @@ const {
 } = require("discord.js");
 require("dotenv").config();
 
+// Prevención de crasheos
 process.on("unhandledRejection", (reason) => console.error("⚠️ Error no capturado:", reason));
 process.on("uncaughtException", (error) => console.error("⚠️ Excepción no capturada:", error));
 
@@ -28,6 +29,7 @@ const client = new Client({
 
 const jugadoresMuertos = new Set();
 
+// Ejecución ultra rápida en paralelo para todos de golpe
 async function procesarUltraRapido(canalVoz, callback) {
     const miembros = Array.from(canalVoz.members.values()).filter(m => !m.user.bot);
     await Promise.all(miembros.map(callback));
@@ -173,20 +175,17 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz.", ephemeral: true });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        // Reconoce el clic al instante sin texto ni "pensando"
+        await interaction.deferUpdate();
 
         if (interaction.customId === "btn_start") {
-            await iniciarTareas(canalVoz);
-            return interaction.editReply({ content: `🎮 Tareas iniciadas en **${canalVoz.name}**. ¡A silenciarse!` });
+            iniciarTareas(canalVoz);
+        } else if (interaction.customId === "btn_meeting") {
+            iniciarReunion(canalVoz);
+        } else if (interaction.customId === "btn_stop") {
+            terminarPartida(canalVoz);
         }
-        if (interaction.customId === "btn_meeting") {
-            await iniciarReunion(canalVoz);
-            return interaction.editReply({ content: `📢 Reunión convocada en **${canalVoz.name}**. ¡A hablar!` });
-        }
-        if (interaction.customId === "btn_stop") {
-            await terminarPartida(canalVoz);
-            return interaction.editReply({ content: `🏁 Partida finalizada en **${canalVoz.name}**.` });
-        }
+        return;
     }
 
     if (!interaction.isChatInputCommand()) return;
@@ -219,19 +218,19 @@ client.on("interactionCreate", async (interaction) => {
 
     if (commandName === "start") {
         await iniciarTareas(canalVoz);
-        return interaction.editReply(`🎮 Tareas iniciadas en **${canalVoz.name}**.`);
+        return interaction.editReply({ content: `🎮 Tareas iniciadas en **${canalVoz.name}**.` });
     } else if (commandName === "meeting") {
         await iniciarReunion(canalVoz);
-        return interaction.editReply(`📢 Reunión convocada en **${canalVoz.name}**.`);
+        return interaction.editReply({ content: `📢 Reunión convocada en **${canalVoz.name}**.` });
     } else if (commandName === "stop") {
         await terminarPartida(canalVoz);
-        return interaction.editReply(`🏁 Partida finalizada en **${canalVoz.name}**.`);
+        return interaction.editReply({ content: `🏁 Partida finalizada en **${canalVoz.name}**.` });
     } else if (commandName === "mute") {
         await silenciarTodos(canalVoz);
-        return interaction.editReply(`🔇 Todos silenciados.`);
+        return interaction.editReply({ content: `🔇 Todos silenciados.` });
     } else if (commandName === "unmute") {
         await desmutearTodos(canalVoz);
-        return interaction.editReply(`🔊 Todos desmuteados.`);
+        return interaction.editReply({ content: `🔊 Todos desmuteados.` });
     } else if (commandName === "dead") {
         const miembroMeta = options.getMember("usuario");
         if (!miembroMeta) return interaction.editReply("No se encontró al usuario.");

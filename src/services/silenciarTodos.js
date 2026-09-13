@@ -1,5 +1,6 @@
 const procesarUltraRapido = require("./procesarUltraRapido");
+const actualizarVoz = require("./actualizarVoz");
 
 module.exports = async function silenciarTodos(canalVoz) {
-  await procesarUltraRapido(canalVoz, (miembro) => miembro.voice.setMute(true).catch(() => null));
+  await procesarUltraRapido(canalVoz, (miembro) => actualizarVoz(miembro, { mute: true }));
 };

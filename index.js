@@ -3,6 +3,7 @@ const { Client, Collection, GatewayIntentBits, Partials } = require("discord.js"
 const cargarComandos = require("./src/loaders/cargarComandos");
 const interactionCreate = require("./src/handlers/interactionCreate");
 const messageCreate = require("./src/handlers/messageCreate");
+const voiceStateUpdate = require("./src/handlers/voiceStateUpdate");
 
 process.on("unhandledRejection", (error) => console.error("Promesa no controlada:", error));
 process.on("uncaughtException", (error) => console.error("Excepción no controlada:", error));
@@ -37,4 +38,5 @@ client.once("ready", async () => {
 
 client.on("interactionCreate", interactionCreate);
 client.on("messageCreate", messageCreate);
+client.on("voiceStateUpdate", voiceStateUpdate);
 client.login(process.env.DISCORD_TOKEN);

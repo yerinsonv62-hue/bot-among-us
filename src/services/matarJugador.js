@@ -1,9 +1,8 @@
-const jugadoresMuertos = require("../state/jugadoresMuertos");
+const partidas = require("../state/partidas");
+const actualizarVoz = require("./actualizarVoz");
 
 module.exports = async function matarJugador(miembro) {
-  jugadoresMuertos.add(miembro.id);
-  await Promise.all([
-    miembro.voice.setMute(false).catch(() => null),
-    miembro.voice.setDeaf(false).catch(() => null)
-  ]);
+  const partida = partidas.obtener(miembro.guild.id);
+  partida.muertos.add(miembro.id);
+  await actualizarVoz(miembro, { mute: false, deaf: false, channelId: partida.canalMuertosId });
 };

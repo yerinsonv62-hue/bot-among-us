@@ -1,9 +1,13 @@
-const jugadoresMuertos = require("../state/jugadoresMuertos");
+const partidas = require("../state/partidas");
+const actualizarVoz = require("./actualizarVoz");
 
 module.exports = async function revivirJugador(miembro) {
-  jugadoresMuertos.delete(miembro.id);
-  await Promise.all([
-    miembro.voice.setMute(true).catch(() => null),
-    miembro.voice.setDeaf(true).catch(() => null)
-  ]);
+  const partida = partidas.obtener(miembro.guild.id);
+  partida.muertos.delete(miembro.id);
+  const enTareas = partida.fase === "tareas";
+  await actualizarVoz(miembro, {
+    mute: enTareas,
+    deaf: enTareas,
+    channelId: partida.canalPrincipalId
+  });
 };

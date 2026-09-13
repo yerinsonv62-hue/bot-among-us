@@ -1,12 +1,12 @@
-const jugadoresMuertos = require("../state/jugadoresMuertos");
+const partidas = require("../state/partidas");
 const procesarUltraRapido = require("./procesarUltraRapido");
+const actualizarVoz = require("./actualizarVoz");
 
 module.exports = async function iniciarReunion(canalVoz) {
+  const partida = partidas.obtener(canalVoz.guild.id);
+  partida.fase = "reunion";
+  partida.canalPrincipalId = canalVoz.id;
   await procesarUltraRapido(canalVoz, async (miembro) => {
-    const estaMuerto = jugadoresMuertos.has(miembro.id);
-    await Promise.all([
-      miembro.voice.setMute(estaMuerto).catch(() => null),
-      miembro.voice.setDeaf(false).catch(() => null)
-    ]);
+    await actualizarVoz(miembro, { mute: partida.muertos.has(miembro.id), deaf: false });
   });
 };

@@ -6,11 +6,11 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ChannelType
+    ChannelType,
+    PermissionFlagsBits
 } = require("discord.js");
 require("dotenv").config();
 
-// Prevención de crasheos
 process.on("unhandledRejection", (reason) => console.error("⚠️ Error no capturado:", reason));
 process.on("uncaughtException", (error) => console.error("⚠️ Excepción no capturada:", error));
 
@@ -28,74 +28,81 @@ const client = new Client({
 
 const jugadoresMuertos = new Set();
 
-// Función auxiliar para lotes seguros (límite de 15 por lote)
-async function procesarEnLotes(canalVoz, callback) {
+async function procesarUltraRapido(canalVoz, callback) {
     const miembros = Array.from(canalVoz.members.values()).filter(m => !m.user.bot);
-    const tamanoLote = 15;
-
-    for (let i = 0; i < miembros.length; i += tamanoLote) {
-        const lote = miembros.slice(i, i + tamanoLote);
-        await Promise.all(lote.map(callback));
-        if (i + tamanoLote < miembros.length) {
-            await new Promise(r => setTimeout(r, 150));
-        }
-    }
+    await Promise.all(miembros.map(callback));
 }
 
 async function iniciarTareas(canalVoz) {
-    await procesarEnLotes(canalVoz, async (miembro) => {
+    await procesarUltraRapido(canalVoz, async (miembro) => {
         if (jugadoresMuertos.has(miembro.id)) {
-            await miembro.voice.setMute(false).catch(() => {});
-            await miembro.voice.setDeaf(false).catch(() => {});
+            await Promise.all([
+                miembro.voice.setMute(false).catch(() => {}),
+                miembro.voice.setDeaf(false).catch(() => {})
+            ]);
         } else {
-            await miembro.voice.setMute(true).catch(() => {});
-            await miembro.voice.setDeaf(true).catch(() => {});
+            await Promise.all([
+                miembro.voice.setMute(true).catch(() => {}),
+                miembro.voice.setDeaf(true).catch(() => {})
+            ]);
         }
     });
 }
 
 async function iniciarReunion(canalVoz) {
-    await procesarEnLotes(canalVoz, async (miembro) => {
+    await procesarUltraRapido(canalVoz, async (miembro) => {
         if (jugadoresMuertos.has(miembro.id)) {
-            await miembro.voice.setMute(true).catch(() => {});
-            await miembro.voice.setDeaf(false).catch(() => {});
+            await Promise.all([
+                miembro.voice.setMute(true).catch(() => {}),
+                miembro.voice.setDeaf(false).catch(() => {})
+            ]);
         } else {
-            await miembro.voice.setMute(false).catch(() => {});
-            await miembro.voice.setDeaf(false).catch(() => {});
+            await Promise.all([
+                miembro.voice.setMute(false).catch(() => {}),
+                miembro.voice.setDeaf(false).catch(() => {})
+            ]);
         }
     });
 }
 
 async function silenciarTodos(canalVoz) {
-    await procesarEnLotes(canalVoz, async (miembro) => {
+    await procesarUltraRapido(canalVoz, async (miembro) => {
         await miembro.voice.setMute(true).catch(() => {});
     });
 }
 
 async function desmutearTodos(canalVoz) {
-    await procesarEnLotes(canalVoz, async (miembro) => {
-        await miembro.voice.setMute(false).catch(() => {});
-        await miembro.voice.setDeaf(false).catch(() => {});
+    await procesarUltraRapido(canalVoz, async (miembro) => {
+        await Promise.all([
+            miembro.voice.setMute(false).catch(() => {}),
+            miembro.voice.setDeaf(false).catch(() => {})
+        ]);
     });
 }
 
 async function matarJugador(miembro) {
     jugadoresMuertos.add(miembro.id);
-    await miembro.voice.setMute(false).catch(() => {});
-    await miembro.voice.setDeaf(false).catch(() => {});
+    await Promise.all([
+        miembro.voice.setMute(false).catch(() => {}),
+        miembro.voice.setDeaf(false).catch(() => {})
+    ]);
 }
 
 async function revivirJugador(miembro) {
     jugadoresMuertos.delete(miembro.id);
-    await miembro.voice.setMute(true).catch(() => {});
-    await miembro.voice.setDeaf(true).catch(() => {});
+    await Promise.all([
+        miembro.voice.setMute(true).catch(() => {}),
+        miembro.voice.setDeaf(true).catch(() => {})
+    ]);
 }
 
 async function terminarPartida(canalVoz) {
     jugadoresMuertos.clear();
-    await procesarEnLotes(canalVoz, async (miembro) => {
-        await miembro.voice.setMute(false).catch(() => {});
-        await miembro.voice.setDeaf(false).catch(() => {});
+    await procesarUltraRapido(canalVoz, async (miembro) => {
+        await Promise.all([
+            miembro.voice.setMute(false).catch(() => {}),
+            miembro.voice.setDeaf(false).catch(() => {})
+        ]);
     });
 }
 
@@ -103,21 +110,24 @@ const commands = [
     new SlashCommandBuilder()
         .setName("start")
         .setDescription("Inicia la partida y mutea a todos")
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addStringOption(option => option.setName("code").setDescription("Código de la partida").setRequired(false))
         .addIntegerOption(option => option.setName("timer").setDescription("Tiempo").setRequired(false))
         .addChannelOption(option => option.setName("channel").setDescription("Canal de voz").addChannelTypes(ChannelType.GuildVoice).setRequired(false)),
-    new SlashCommandBuilder().setName("meeting").setDescription("Desmutea a todos para una reunión"),
-    new SlashCommandBuilder().setName("stop").setDescription("Termina la partida y desmutea a todos"),
-    new SlashCommandBuilder().setName("panel").setDescription("Envía el panel de control con botones interactivos"),
-    new SlashCommandBuilder().setName("mute").setDescription("Mutea a todos"),
-    new SlashCommandBuilder().setName("unmute").setDescription("Desmutea a todos"),
+    new SlashCommandBuilder().setName("meeting").setDescription("Desmutea a todos para una reunión").setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName("stop").setDescription("Termina la partida y desmutea a todos").setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName("panel").setDescription("Envía el panel de control con botones interactivos").setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName("mute").setDescription("Mutea a todos").setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName("unmute").setDescription("Desmutea a todos").setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder()
         .setName("dead")
         .setDescription("Mutea a un jugador muerto")
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(option => option.setName("usuario").setDescription("Jugador que murió").setRequired(true)),
     new SlashCommandBuilder()
         .setName("alive")
         .setDescription("Desmutea a un jugador")
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(option => option.setName("usuario").setDescription("Jugador a revivir").setRequired(true))
 ];
 
@@ -151,7 +161,13 @@ async function obtenerCanalVozUsuario(user, guildId = null) {
 }
 
 client.on("interactionCreate", async (interaction) => {
+    const esAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
+
     if (interaction.isButton()) {
+        if (!esAdmin) {
+            return interaction.reply({ content: "⚠️ Solo los administradores pueden usar este panel.", ephemeral: true });
+        }
+
         const canalVoz = await obtenerCanalVozUsuario(interaction.user, interaction.guildId);
         if (!canalVoz) {
             return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz.", ephemeral: true });
@@ -174,6 +190,10 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (!interaction.isChatInputCommand()) return;
+
+    if (!esAdmin) {
+        return interaction.reply({ content: "⚠️ No tienes permisos de administrador para usar este comando.", ephemeral: true });
+    }
 
     const { commandName, user, options, guildId } = interaction;
 
@@ -225,16 +245,18 @@ client.on("interactionCreate", async (interaction) => {
     }
 });
 
-// Control por mensajes de texto directos o DM
 client.on("messageCreate", async (message) => {
-    if (message.author.bot) return;
+    if (message.author.bot || !message.guild) return;
+
+    const miembro = await message.guild.members.fetch(message.author.id).catch(() => null);
+    if (!miembro || !miembro.permissions.has(PermissionFlagsBits.Administrator)) return;
 
     const contenido = message.content.trim().toLowerCase();
     const comandosValidos = ["start", ".start", "meeting", ".meeting", "stop", ".stop", "dead", ".dead", "mute", "unmute"];
     
     if (!comandosValidos.some(cmd => contenido.startsWith(cmd))) return;
 
-    const canalVoz = await obtenerCanalVozUsuario(message.author);
+    const canalVoz = await obtenerCanalVozUsuario(message.author, message.guild.id);
 
     if (!canalVoz) {
         return message.reply("⚠️ Debes estar conectado a un canal de voz para usar los comandos.");

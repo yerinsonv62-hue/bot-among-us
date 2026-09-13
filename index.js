@@ -28,9 +28,22 @@ const client = new Client({
 
 const jugadoresMuertos = new Set();
 
+// Función auxiliar para lotes seguros (límite de 15 por lote)
+async function procesarEnLotes(canalVoz, callback) {
+    const miembros = Array.from(canalVoz.members.values()).filter(m => !m.user.bot);
+    const tamanoLote = 15;
+
+    for (let i = 0; i < miembros.length; i += tamanoLote) {
+        const lote = miembros.slice(i, i + tamanoLote);
+        await Promise.all(lote.map(callback));
+        if (i + tamanoLote < miembros.length) {
+            await new Promise(r => setTimeout(r, 150));
+        }
+    }
+}
+
 async function iniciarTareas(canalVoz) {
-    for (const miembro of canalVoz.members.values()) {
-        if (miembro.user.bot) continue;
+    await procesarEnLotes(canalVoz, async (miembro) => {
         if (jugadoresMuertos.has(miembro.id)) {
             await miembro.voice.setMute(false).catch(() => {});
             await miembro.voice.setDeaf(false).catch(() => {});
@@ -38,12 +51,11 @@ async function iniciarTareas(canalVoz) {
             await miembro.voice.setMute(true).catch(() => {});
             await miembro.voice.setDeaf(true).catch(() => {});
         }
-    }
+    });
 }
 
 async function iniciarReunion(canalVoz) {
-    for (const miembro of canalVoz.members.values()) {
-        if (miembro.user.bot) continue;
+    await procesarEnLotes(canalVoz, async (miembro) => {
         if (jugadoresMuertos.has(miembro.id)) {
             await miembro.voice.setMute(true).catch(() => {});
             await miembro.voice.setDeaf(false).catch(() => {});
@@ -51,22 +63,20 @@ async function iniciarReunion(canalVoz) {
             await miembro.voice.setMute(false).catch(() => {});
             await miembro.voice.setDeaf(false).catch(() => {});
         }
-    }
+    });
 }
 
 async function silenciarTodos(canalVoz) {
-    for (const miembro of canalVoz.members.values()) {
-        if (miembro.user.bot) continue;
+    await procesarEnLotes(canalVoz, async (miembro) => {
         await miembro.voice.setMute(true).catch(() => {});
-    }
+    });
 }
 
 async function desmutearTodos(canalVoz) {
-    for (const miembro of canalVoz.members.values()) {
-        if (miembro.user.bot) continue;
+    await procesarEnLotes(canalVoz, async (miembro) => {
         await miembro.voice.setMute(false).catch(() => {});
         await miembro.voice.setDeaf(false).catch(() => {});
-    }
+    });
 }
 
 async function matarJugador(miembro) {
@@ -83,11 +93,10 @@ async function revivirJugador(miembro) {
 
 async function terminarPartida(canalVoz) {
     jugadoresMuertos.clear();
-    for (const miembro of canalVoz.members.values()) {
-        if (miembro.user.bot) continue;
+    await procesarEnLotes(canalVoz, async (miembro) => {
         await miembro.voice.setMute(false).catch(() => {});
         await miembro.voice.setDeaf(false).catch(() => {});
-    }
+    });
 }
 
 const commands = [
@@ -148,17 +157,19 @@ client.on("interactionCreate", async (interaction) => {
             return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz.", ephemeral: true });
         }
 
+        await interaction.deferReply({ ephemeral: true });
+
         if (interaction.customId === "btn_start") {
             await iniciarTareas(canalVoz);
-            return interaction.reply({ content: `🎮 Tareas iniciadas en **${canalVoz.name}**. ¡A silenciarse!`, ephemeral: true });
+            return interaction.editReply({ content: `🎮 Tareas iniciadas en **${canalVoz.name}**. ¡A silenciarse!` });
         }
         if (interaction.customId === "btn_meeting") {
             await iniciarReunion(canalVoz);
-            return interaction.reply({ content: `📢 Reunión convocada en **${canalVoz.name}**. ¡A hablar!`, ephemeral: true });
+            return interaction.editReply({ content: `📢 Reunión convocada en **${canalVoz.name}**. ¡A hablar!` });
         }
         if (interaction.customId === "btn_stop") {
             await terminarPartida(canalVoz);
-            return interaction.reply({ content: `🏁 Partida finalizada en **${canalVoz.name}**.` });
+            return interaction.editReply({ content: `🏁 Partida finalizada en **${canalVoz.name}**.` });
         }
     }
 
@@ -179,19 +190,6 @@ client.on("interactionCreate", async (interaction) => {
         });
     }
 
-    if (commandName === "start") {
-        const canalOpcion = options.getChannel("channel");
-        let canalVoz = canalOpcion || (await obtenerCanalVozUsuario(user, guildId));
-
-        if (!canalVoz) {
-            return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz.", ephemeral: true });
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-        await iniciarTareas(canalVoz);
-        return interaction.editReply(`🎮 Tareas iniciadas en **${canalVoz.name}**.`);
-    }
-
     const canalVoz = await obtenerCanalVozUsuario(user, guildId);
     if (!canalVoz) {
         return interaction.reply({ content: "⚠️ Debes estar conectado a un canal de voz.", ephemeral: true });
@@ -199,9 +197,12 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.deferReply({ ephemeral: true });
 
-    if (commandName === "meeting") {
+    if (commandName === "start") {
+        await iniciarTareas(canalVoz);
+        return interaction.editReply(`🎮 Tareas iniciadas en **${canalVoz.name}**.`);
+    } else if (commandName === "meeting") {
         await iniciarReunion(canalVoz);
-        await interaction.editReply(`📢 Reunión convocada en **${canalVoz.name}**.`);
+        return interaction.editReply(`📢 Reunión convocada en **${canalVoz.name}**.`);
     } else if (commandName === "stop") {
         await terminarPartida(canalVoz);
         return interaction.editReply(`🏁 Partida finalizada en **${canalVoz.name}**.`);
@@ -221,6 +222,44 @@ client.on("interactionCreate", async (interaction) => {
         if (!miembroMeta) return interaction.editReply("No se encontró al usuario.");
         await revivirJugador(miembroMeta);
         return interaction.editReply(`✨ ${miembroMeta.user.username} revivido.`);
+    }
+});
+
+// Control por mensajes de texto directos o DM
+client.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+
+    const contenido = message.content.trim().toLowerCase();
+    const comandosValidos = ["start", ".start", "meeting", ".meeting", "stop", ".stop", "dead", ".dead", "mute", "unmute"];
+    
+    if (!comandosValidos.some(cmd => contenido.startsWith(cmd))) return;
+
+    const canalVoz = await obtenerCanalVozUsuario(message.author);
+
+    if (!canalVoz) {
+        return message.reply("⚠️ Debes estar conectado a un canal de voz para usar los comandos.");
+    }
+
+    if (contenido === "start" || contenido === ".start") {
+        await iniciarTareas(canalVoz);
+        return message.reply(`🎮 Tareas iniciadas en **${canalVoz.name}**.`);
+    } else if (contenido === "meeting" || contenido === ".meeting") {
+        await iniciarReunion(canalVoz);
+        return message.reply(`📢 Reunión convocada en **${canalVoz.name}**.`);
+    } else if (contenido === "stop" || contenido === ".stop") {
+        await terminarPartida(canalVoz);
+        return message.reply(`🏁 Partida finalizada en **${canalVoz.name}**.`);
+    } else if (contenido === "mute") {
+        await silenciarTodos(canalVoz);
+        return message.reply(`🔇 Canal silenciado.`);
+    } else if (contenido === "unmute") {
+        await desmutearTodos(canalVoz);
+        return message.reply(`🔊 Canal desmuteado.`);
+    } else if (contenido.startsWith("dead") || contenido.startsWith(".dead")) {
+        const mencion = message.mentions.members.first();
+        if (!mencion) return message.reply("Menciona al jugador muerto. Ej: `.dead @Usuario`");
+        await matarJugador(mencion);
+        return message.reply(`💀 **${mencion.user.username}** registrado como muerto.`);
     }
 });
 
